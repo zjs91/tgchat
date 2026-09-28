@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>诊断</title>
+<style>
+body{background:#0e1621;color:#fff;font-family:-apple-system,sans-serif;padding:20px;line-height:1.7}
+input,button{width:100%;padding:14px;border-radius:10px;border:1px solid #2b3a4a;background:#242f3d;color:#fff;font-size:16px;margin-bottom:10px}
+button{background:#5288c1;border:none;font-weight:600}
+pre{background:#17212b;padding:14px;border-radius:10px;white-space:pre-wrap;word-break:break-all;font-size:13px;margin-top:14px}
+</style>
+</head>
+<body>
+<h3>卡密验证诊断</h3>
+<input id="k" value="电报卡密-2025-甲一甲一-壹壹壹壹">
+<button id="go">测试</button>
+<pre id="log">点击"测试"开始</pre>
+<script>
+const $=id=>document.getElementById(id);
+function log(s){$('log').textContent+='\n'+s}
+$('go').onclick=async()=>{
+  $('log').textContent='开始测试...\n';
+  log('1. JS 运行正常 ✅');
+  const kami=$('k').value.trim();
+  log('2. 卡密：'+kami);
+  const url='https://8.219.163.239.nip.io/api/verify-kami';
+  log('3. URL：'+url);
+  try{
+    log('4. 发起 fetch...');
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kami})
+    });
+    log('5. HTTP 状态码：'+r.status);
+    const text=await r.text();
+    log('6. 响应内容：'+text);
+    log('7. ✅ 测试完成');
+  }catch(e){
+    log('5. ❌ 出错：'+e.message);
+    log('   错误类型：'+e.name);
+  }
+};
+</script>
+</body>
+</html>
