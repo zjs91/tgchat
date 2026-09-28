@@ -169,8 +169,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue'
 .msg-row.other{align-self:flex-start}
 .msg-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--accent);cursor:pointer;border:1px solid var(--border)}
 .msg-avatar img{width:100%;height:100%;object-fit:cover}
-.msg-"avatar.loading{background:var(--skeleton); idbackground-size:200% 100%;animation=":shimmer 1.4draws infinite}
-.msg{flex:1;min-width:0;paddinger:9px 13px;border-radius:18px;word-wrap:break-word;word-break:break-word;transition:transform .15s,background .2s;cursor:pointer;user-select:none;-webkit-user-select:none;box-shadow:var(--bubble-shadow)}
+.msg-avatar.loading{background:var(--skeleton);background-size:200% 100%;animation:shimmer 1.4s infinite}
+.msg{flex:1;min-width:0;padding:9px 13px;border-radius:18px;word-wrap:break-word;word-break:break-word;transition:transform .15s,background .2s;cursor:pointer;user-select:none;-webkit-user-select:none;box-shadow:var(--bubble-shadow)}
 .msg:active{transform:scale(.985)}
 .msg.mine{background:var(--bubble-mine);color:#fff;border-bottom-right-radius:6px}
 .msg.other{background:var(--bubble-other);color:var(--txt);border-bottom-left-radius:6px}
@@ -303,7 +303,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue'
 
 <div id="mainScreen" class="screen">
   <div class="drawer-overlay" id="drawerOverlay"></div>
-  <div class="drawer">
+  <div class="drawer" id="drawer">
     <div class="drawer-header">
       <div class="drawer-avatar" id="drawerAvatar">A</div>
       <div class="drawer-name" id="drawerName">昵称</div>
@@ -1372,4 +1372,86 @@ $('importFile').addEventListener('change',async e=>{const file=e.target.files&&e
 $('setStorage').onclick=async()=>{$('storageModal').classList.add('show');await updateStorageDetail()};
 $('storageClose').onclick=()=>$('storageModal').classList.remove('show');
 $('clearMediaBtn').onclick=async()=>{if(!confirm('清理所有图片/视频缓存？文字消息保留'))return;await idbClear();releaseAllBlobUrls();showBanner('已清理');setTimeout(hideBanner,1200);await updateStorageDetail();await updateStorageValue()};
-$('clearMsgsBtn').onclick=()=>{if(!confirm('⚠️ 清空所有聊天记录？（群组和账户保留）'))return;const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('tg_msgs_')||k.startsWith('tg_reads_')||k.startsWith('tg_deleted_')||k.startsWith('tg_reacts_'))keys.push(k)}keys.forEach(k=>localStorage.removeItem(k));showBanner('已清空');setTimeout(hideBanner,1200);renderGroup
+$('clearMsgsBtn').onclick=()=>{if(!confirm('⚠️ 清空所有聊天记录？（群组和账户保留）'))return;const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('tg_msgs_')||k.startsWith('tg_reads_')||k.startsWith('tg_deleted_')||k.startsWith('tg_reacts_'))keys.push(k)}keys.forEach(k=>localStorage.removeItem(k));showBanner('已清空');setTimeout(hideBanner,1200);renderGroupList();updateStorageDetail();updateStorageValue()};
+
+/* ============ 聊天事件 ============ */
+$('backBtn').onclick=()=>leaveGroup();
+$('headerInfo').onclick=()=>{$('onlinePanel').classList.toggle('show')};
+$('chatMenuBtn').onclick=()=>{$('onlinePanel').classList.toggle('show')};
+$('onlineClose').onclick=()=>{$('onlinePanel').classList.remove('show')};
+$('sendBtn').onclick=sendMessage;
+
+const msgInput=$('msgInput');
+msgInput.addEventListener('input',()=>{autoResizeTextarea()});
+msgInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+msgInput.addEventListener('focus',()=>{
+  setTimeout(()=>{
+    adjustChatScreenHeight();
+    if(State.isAtBottom)ensureScrollToBottom();
+  },200);
+  setTimeout(()=>{
+    adjustChatScreenHeight();
+    if(State.isAtBottom)ensureScrollToBottom();
+  },400);
+});
+msgInput.addEventListener('blur',()=>{
+  setTimeout(()=>{adjustChatScreenHeight()},200);
+});
+
+$('attachBtn').onclick=()=>{if(!State.cryptoKey)return;$('fileInput').click()};
+$('fileInput').addEventListener('change',async e=>{const file=e.target.files&&e.target.files[0];e.target.value='';if(file)await sendMediaFile(file)});
+
+// 滚动监听（rAF 节流）
+const messagesEl=$('messages');
+messagesEl.addEventListener('scroll',()=>{
+  if(State.scrollRafPending)return;
+  State.scrollRafPending=true;
+  requestAnimationFrame(()=>{
+    State.scrollRafPending=false;
+    const box=messagesEl;
+    const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<60;
+    State.isAtBottom=atBottom;
+    const btn=$('scrollBottomBtn');
+    if(atBottom){
+      btn.classList.remove('show');
+      if(State.unreadCount>0){
+        State.unreadCount=0;updateUnreadBadge();$('scrollBottomBadge').textContent='';
+        if(State.cryptoKey&&chatVisible())sendReadReceipt();
+      }
+    }else{
+      btn.classList.add('show');
+    }
+  });
+},{passive:true});
+
+$('scrollBottomBtn').onclick=()=>{
+  State.isAtBottom=true;
+  scrollToBottomNow(true);
+  State.unreadCount=0;updateUnreadBadge();
+  $('scrollBottomBadge').textContent='';
+  $('scrollBottomBtn').classList.remove('show');
+  if(State.cryptoKey)sendReadReceipt();
+};
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    State.unreadCount=0;updateUnreadBadge();
+    $('scrollBottomBadge').textContent='';
+    if(State.cryptoKey&&chatVisible())sendReadReceipt();
+  }
+});
+
+/* ============ 初始化 ============ */
+(async function init(){
+  openIDB().catch(()=>{});
+  applyTheme();applyFont();
+  $('swMsgSync').classList.toggle('on',getMsgSyncSetting());
+  ['lightbox','onlinePanel','emojiBar'].forEach(m=>{const el=$(m);if(el)el.classList.remove('show')});
+  autoResizeTextarea();
+  if(localStorage.getItem(CONFIG.KEYS.ACTIVATED)==='1')await afterKamiOK();
+  else showScreen('kamiScreen');
+  document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
+})();
+</script>
+</body>
+</html>
