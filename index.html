@@ -1,1 +1,397 @@
-1
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#17212b">
+<title>电报加密聊天</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;background:#0e1621;color:#fff;overflow:hidden;-webkit-font-smoothing:antialiased;touch-action:manipulation}
+.screen{display:none;flex-direction:column;position:fixed;inset:0;height:100dvh;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+.screen.active{display:flex}
+.auth-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.auth-box{width:100%;max-width:400px}
+.logo{font-size:60px;text-align:center;margin-bottom:12px}
+.title{font-size:24px;font-weight:600;text-align:center}
+.subtitle{color:#8e8e93;font-size:14px;text-align:center;margin:8px 0 24px;line-height:1.5}
+.input{width:100%;background:#242f3d;border:1px solid #2b3a4a;border-radius:12px;padding:14px 16px;color:#fff;font-size:16px;margin-bottom:14px;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .2s}
+.input:focus{border-color:#5288c1}
+.input::placeholder{color:#6b7a88}
+.btn{width:100%;background:#5288c1;border:none;border-radius:12px;padding:15px;color:#fff;font-size:17px;font-weight:600;cursor:pointer;-webkit-appearance:none;appearance:none;transition:opacity .15s,background .15s}
+.btn:active{opacity:.8;background:#4a7ab0}
+.btn:disabled{opacity:.5}
+.error{color:#e74c3c;font-size:14px;margin-bottom:12px;text-align:center;min-height:20px}
+.hint{color:#8e8e93;font-size:12px;margin-top:16px;text-align:center;line-height:1.9}
+.hint code{background:#242f3d;padding:2px 6px;border-radius:4px;color:#7fb3e0;font-size:12px}
+.chat-header{display:flex;align-items:center;padding:10px 14px;background:#242f3d;border-bottom:1px solid #2b3a4a;flex-shrink:0}
+.chat-header .avatar{width:40px;height:40px;border-radius:50%;background:#5288c1;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;margin-right:10px;flex-shrink:0}
+.chat-header .info{flex:1;min-width:0}
+.chat-header .name{font-size:16px;font-weight:600}
+.chat-header .status{font-size:12px;color:#8e8e93;margin-top:2px;display:flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;background:#f39c12;display:inline-block}
+.dot.online{background:#27ae60}
+.dot.offline{background:#e74c3c}
+.chat-header .logout{background:none;border:none;color:#8e8e93;font-size:13px;cursor:pointer;padding:8px;-webkit-appearance:none}
+.chat-header .logout:active{color:#fff}
+.messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 10px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:82%;padding:8px 12px;border-radius:16px;word-wrap:break-word;word-break:break-word;animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.msg.mine{align-self:flex-end;background:#2b5278;border-bottom-right-radius:5px}
+.msg.other{align-self:flex-start;background:#182533;border-bottom-left-radius:5px}
+.msg .sender{font-size:12px;color:#7fb3e0;margin-bottom:2px;font-weight:600}
+.msg .text{font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg .meta{font-size:11px;color:rgba(255,255,255,.45);text-align:right;margin-top:3px}
+.msg.error .text{color:#e74c3c;font-style:italic}
+.msg .pending{color:#f39c12;font-size:11px;margin-left:6px}
+.sys-msg{text-align:center;color:#8e8e93;font-size:12px;padding:8px 16px;line-height:1.6}
+.input-bar{display:flex;gap:8px;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0));background:#242f3d;border-top:1px solid #2b3a4a;flex-shrink:0}
+.input-bar input{flex:1;background:#17212b;border:none;border-radius:20px;padding:10px 16px;color:#fff;font-size:16px;outline:none;-webkit-appearance:none;appearance:none;min-width:0}
+.input-bar input::placeholder{color:#6b7a88}
+.send-btn{background:#5288c1;border:none;border-radius:20px;padding:0 20px;color:#fff;font-weight:600;cursor:pointer;font-size:15px;flex-shrink:0;-webkit-appearance:none;transition:opacity .15s}
+.send-btn:active{opacity:.8}
+.send-btn:disabled{opacity:.4}
+</style>
+</head>
+<body>
+
+<div id="kamiScreen" class="screen active">
+  <div class="auth-wrap"><div class="auth-box">
+    <div class="logo">✈️</div>
+    <div class="title">电报加密聊天</div>
+    <div class="subtitle">请输入卡密以继续</div>
+    <div class="error" id="kamiError"></div>
+    <input id="kamiInput" class="input" placeholder="电报卡密-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <button id="kamiBtn" class="btn">验 证</button>
+    <div class="hint">演示卡密：<br><code>电报卡密-2025-甲一甲一-壹壹壹壹</code><br><code>电报卡密-2025-乙二乙二-贰贰贰贰</code><br><code>电报卡密-2025-丙三丙三-叁叁叁叁</code></div>
+  </div></div>
+</div>
+
+<div id="roomScreen" class="screen">
+  <div class="auth-wrap"><div class="auth-box">
+    <div class="logo">🔒</div>
+    <div class="title">进入加密房间</div>
+    <div class="subtitle">相同房间密码才能互相聊天<br>密码同时用于消息加密，服务器无法解密</div>
+    <div class="error" id="roomError"></div>
+    <input id="nickInput" class="input" placeholder="你的昵称" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="20">
+    <input id="roomPassInput" class="input" type="password" placeholder="房间密码（至少 6 位）" autocomplete="new-password">
+    <button id="roomBtn" class="btn">进入聊天</button>
+    <div class="hint">⚠️ 密码忘记将无法解密历史消息</div>
+  </div></div>
+</div>
+
+<div id="chatScreen" class="screen">
+  <div class="chat-header">
+    <div class="avatar" id="myAvatar">?</div>
+    <div class="info">
+      <div class="name">加密频道</div>
+      <div class="status"><span class="dot" id="statusDot"></span><span id="statusLabel">连接中...</span></div>
+    </div>
+    <button class="logout" id="logoutBtn">退出</button>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="input-bar" id="inputBar">
+    <input id="msgInput" placeholder="输入消息..." autocomplete="off" autocapitalize="sentences" enterkeyhint="send">
+    <button class="send-btn" id="sendBtn">发送</button>
+  </div>
+</div>
+
+<script>
+/* ============ SHA-256 纯 JS 实现 ============ */
+const SHA256_K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function rotr(x,n){return((x>>>n)|(x<<(32-n)))>>>0}
+function sha256(data){
+  if(typeof data==='string')data=new TextEncoder().encode(data);
+  const l=data.length,bitLen=l*8,padLen=((l+9+63)&~63);
+  const padded=new Uint8Array(padLen);padded.set(data);padded[l]=0x80;
+  const view=new DataView(padded.buffer);
+  view.setUint32(padLen-4,bitLen>>>0,false);
+  view.setUint32(padLen-8,Math.floor(bitLen/0x100000000),false);
+  let H0=0x6a09e667,H1=0xbb67ae85,H2=0x3c6ef372,H3=0xa54ff53a,H4=0x510e527f,H5=0x9b05688c,H6=0x1f83d9ab,H7=0x5be0cd19;
+  const w=new Uint32Array(64);
+  for(let i=0;i<padLen;i+=64){
+    for(let j=0;j<16;j++)w[j]=view.getUint32(i+j*4,false);
+    for(let j=16;j<64;j++){
+      const s0=rotr(w[j-15],7)^rotr(w[j-15],18)^(w[j-15]>>>3);
+      const s1=rotr(w[j-2],17)^rotr(w[j-2],19)^(w[j-2]>>>10);
+      w[j]=(w[j-16]+s0+w[j-7]+s1)>>>0;
+    }
+    let a=H0,b=H1,c=H2,d=H3,e=H4,f=H5,g=H6,h=H7;
+    for(let j=0;j<64;j++){
+      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);
+      const ch=(e&f)^(~e&g);
+      const t1=(h+S1+ch+SHA256_K[j]+w[j])>>>0;
+      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);
+      const maj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+maj)>>>0;
+      h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
+    }
+    H0=(H0+a)>>>0;H1=(H1+b)>>>0;H2=(H2+c)>>>0;H3=(H3+d)>>>0;
+    H4=(H4+e)>>>0;H5=(H5+f)>>>0;H6=(H6+g)>>>0;H7=(H7+h)>>>0;
+  }
+  const out=new Uint8Array(32),ov=new DataView(out.buffer);
+  [H0,H1,H2,H3,H4,H5,H6,H7].forEach((v,i)=>ov.setUint32(i*4,v,false));
+  return out;
+}
+
+/* ============ 加密模块 ============ */
+const MAGIC=new Uint8Array([0x54,0x47,0x4D,0x00]);
+const SALT=new TextEncoder().encode('tg-encrypted-chat-salt-v1');
+const PBKDF2_ITER=2000;
+
+function concatBytes(){let t=0;for(let i=0;i<arguments.length;i++)t+=arguments[i].length;const o=new Uint8Array(t);let off=0;for(let i=0;i<arguments.length;i++){o.set(arguments[i],off);off+=arguments[i].length}return o}
+function intToBytes(n){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,false);return b}
+function b64encode(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=String.fromCharCode(bytes[i]);return btoa(s)}
+function b64decode(str){const bin=atob(str);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out}
+function bytesToHex(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=bytes[i].toString(16).padStart(2,'0');return s}
+function deriveKey(password){const pw=new TextEncoder().encode(password);let key=sha256(concatBytes(pw,SALT));for(let i=0;i<PBKDF2_ITER;i++)key=sha256(concatBytes(key,SALT,intToBytes(i)));return key}
+function xorStream(key,iv,data){const out=new Uint8Array(data.length);for(let i=0;i<data.length;i+=32){const block=sha256(concatBytes(key,iv,intToBytes(i>>>5)));const end=Math.min(i+32,data.length);for(let j=i;j<end;j++)out[j]=data[j]^block[j-i]}return out}
+function encryptString(key,iv,str){const pt=concatBytes(MAGIC,new TextEncoder().encode(str));return xorStream(key,iv,pt)}
+function decryptString(key,iv,ct){const pt=xorStream(key,iv,ct);if(pt.length<4||pt[0]!==MAGIC[0]||pt[1]!==MAGIC[1]||pt[2]!==MAGIC[2]||pt[3]!==MAGIC[3])throw new Error('decrypt failed');return new TextDecoder().decode(pt.subarray(4))}
+function randomBytes(n){const b=new Uint8Array(n);if(window.crypto&&window.crypto.getRandomValues){window.crypto.getRandomValues(b)}else{for(let i=0;i<n;i++)b[i]=Math.floor(Math.random()*256)}return b}
+
+/* ============ 配置 ============ */
+const VALID_KAMIS=['电报卡密-2025-甲一甲一-壹壹壹壹','电报卡密-2025-乙二乙二-贰贰贰贰','电报卡密-2025-丙三丙三-叁叁叁叁'];
+const KEY_ACTIVATED='tg_kami_activated';
+const MQTT_URL='wss://broker.emqx.io:8084/mqtt';
+
+let cryptoKey=null,nickname='',roomTopic='',mqttClient=null;
+let msgStorageKey='tg_msgs_default';
+let seenIds=new Set();
+let pendingQueue=[];
+
+/* ============ 工具 ============ */
+const $=id=>document.getElementById(id);
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setStatus(state,text){$('statusDot').className='dot '+state;$('statusLabel').textContent=text}
+
+/* ============ 存储 ============ */
+function loadMessages(){
+  const raw=localStorage.getItem(msgStorageKey);
+  if(!raw)return[];
+  let encrypted;try{encrypted=JSON.parse(raw)}catch{return[]}
+  const result=[];
+  for(const item of encrypted){
+    try{
+      const plain=decryptString(cryptoKey,b64decode(item.iv),b64decode(item.ct));
+      const obj=JSON.parse(plain);
+      result.push({id:item.id,time:item.time,sender:obj.sender,text:obj.text,pending:item.pending});
+    }catch{
+      result.push({id:item.id,time:item.time,sender:'?',text:'[无法解密]',error:true});
+    }
+  }
+  return result;
+}
+function saveLocal(id,ivBytes,ctBytes,time,pending){
+  const raw=localStorage.getItem(msgStorageKey);
+  const arr=raw?JSON.parse(raw):[];
+  arr.push({id,iv:b64encode(ivBytes),ct:b64encode(ctBytes),time,pending:!!pending});
+  if(arr.length>500)arr.splice(0,arr.length-500);
+  try{localStorage.setItem(msgStorageKey,JSON.stringify(arr))}
+  catch{arr.splice(0,100);try{localStorage.setItem(msgStorageKey,JSON.stringify(arr))}catch{}}
+}
+function markSent(id){
+  const raw=localStorage.getItem(msgStorageKey);
+  if(!raw)return;
+  try{const arr=JSON.parse(raw);const m=arr.find(x=>x.id===id);if(m){m.pending=false;localStorage.setItem(msgStorageKey,JSON.stringify(arr))}}catch{}
+}
+function rebuildSeenIds(){
+  seenIds=new Set();
+  const raw=localStorage.getItem(msgStorageKey);
+  if(!raw)return;
+  try{const arr=JSON.parse(raw);arr.forEach(m=>seenIds.add(m.id))}catch{}
+}
+
+/* ============ 渲染 ============ */
+function renderMessages(msgs){
+  const box=$('messages');box.innerHTML='';
+  msgs.sort((a,b)=>a.time-b.time);
+  if(msgs.length===0){
+    const d=document.createElement('div');
+    d.className='sys-msg';d.textContent='端到端加密 · 服务器只转发密文';
+    box.appendChild(d);return;
+  }
+  for(const m of msgs){
+    const div=document.createElement('div');
+    div.className='msg '+(m.sender===nickname?'mine':'other')+(m.error?' error':'');
+    const timeStr=new Date(m.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    div.innerHTML=(m.sender!==nickname?`<div class="sender">${escapeHtml(m.sender)}</div>`:'')+
+      `<div class="text">${escapeHtml(m.text)}${m.pending?'<span class="pending">·</span>':''}</div>`+
+      `<div class="meta">${timeStr}</div>`;
+    box.appendChild(div);
+  }
+  box.scrollTop=box.scrollHeight;
+}
+
+/* ============ MQTT ============ */
+function connectMQTT(roomPassword){
+  if(typeof mqtt==='undefined'){setStatus('offline','MQTT 未加载');return}
+  const topicHash=sha256('topic:'+roomPassword);
+  roomTopic='tgchat/'+bytesToHex(topicHash).slice(0,32);
+  msgStorageKey='tg_msgs_'+bytesToHex(topicHash).slice(0,16);
+  rebuildSeenIds();
+
+  mqttClient=mqtt.connect(MQTT_URL,{
+    clientId:'tgc_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),
+    clean:true,reconnectPeriod:3000,connectTimeout:10000,keepalive:60
+  });
+
+  mqttClient.on('connect',()=>{
+    mqttClient.subscribe(roomTopic,{qos:0},err=>{
+      if(err){setStatus('offline','订阅失败')}
+      else{setStatus('online','已连接 · 端到端加密');flushQueue()}
+    });
+  });
+  mqttClient.on('message',(topic,payload)=>handleIncoming(payload));
+  mqttClient.on('error',()=>setStatus('offline','连接出错'));
+  mqttClient.on('close',()=>setStatus('offline','已断开'));
+  mqttClient.on('reconnect',()=>setStatus('','重连中...'));
+  mqttClient.on('offline',()=>setStatus('offline','离线'));
+}
+
+function handleIncoming(payload){
+  if(!cryptoKey||payload.length<17)return;
+  try{
+    const iv=payload.subarray(0,16),ct=payload.subarray(16);
+    const plain=decryptString(cryptoKey,iv,ct);
+    const obj=JSON.parse(plain);
+    if(seenIds.has(obj.id))return;
+    seenIds.add(obj.id);
+    saveLocal(obj.id,iv,ct,obj.time||Date.now(),false);
+    renderMessages(loadMessages());
+    if(obj.sender!==nickname&&navigator.vibrate){try{navigator.vibrate(30)}catch{}}
+  }catch{}
+}
+
+function publishMessage(id,text){
+  const iv=randomBytes(16);
+  const payload=JSON.stringify({id,sender:nickname,text,time:Date.now()});
+  const ct=encryptString(cryptoKey,iv,payload);
+  seenIds.add(id);
+  const connected=mqttClient&&mqttClient.connected;
+  saveLocal(id,iv,ct,Date.now(),!connected);
+  if(connected){
+    mqttClient.publish(roomTopic,concatBytes(iv,ct),{qos:0});
+  }else{
+    pendingQueue.push({id,iv,ct});
+  }
+  return connected;
+}
+
+function flushQueue(){
+  if(!mqttClient||!mqttClient.connected)return;
+  while(pendingQueue.length>0){
+    const item=pendingQueue.shift();
+    mqttClient.publish(roomTopic,concatBytes(item.iv,item.ct),{qos:0});
+    markSent(item.id);
+  }
+  renderMessages(loadMessages());
+}
+
+function disconnectMQTT(){
+  if(mqttClient){try{mqttClient.end(true)}catch{}mqttClient=null}
+}
+
+/* ============ 卡密验证 ============ */
+$('kamiBtn').onclick=()=>{
+  const val=$('kamiInput').value.trim();
+  if(!val){$('kamiError').textContent='请输入卡密';return}
+  if(VALID_KAMIS.includes(val)){
+    localStorage.setItem(KEY_ACTIVATED,'1');
+    $('kamiError').textContent='';
+    $('kamiInput').blur();
+    goToRoomScreen();
+  }else{
+    $('kamiError').textContent='卡密无效，请检查后重试';
+  }
+};
+$('kamiInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('kamiBtn').click()});
+
+/* ============ 房间页 ============ */
+function goToRoomScreen(){
+  $('roomError').textContent='';
+  $('roomBtn').disabled=false;
+  $('roomBtn').textContent='进入聊天';
+  showScreen('roomScreen');
+}
+$('roomBtn').onclick=()=>{
+  const nick=$('nickInput').value.trim();
+  const pass=$('roomPassInput').value;
+  if(nick.length<1){$('roomError').textContent='请输入昵称';return}
+  if(pass.length<6){$('roomError').textContent='房间密码至少 6 位';return}
+  $('roomBtn').disabled=true;
+  $('roomBtn').textContent='处理中...';
+  $('roomError').textContent='';
+  setTimeout(()=>{
+    try{
+      cryptoKey=deriveKey(pass);
+      nickname=nick;
+      showScreen('chatScreen');
+      $('myAvatar').textContent=nickname.charAt(0).toUpperCase();
+      setStatus('','连接中...');
+      connectMQTT(pass);
+      renderMessages(loadMessages());
+      setTimeout(()=>$('msgInput').focus(),100);
+    }catch(err){
+      $('roomError').textContent='发生错误：'+err.message;
+      $('roomBtn').disabled=false;
+      $('roomBtn').textContent='进入聊天';
+    }
+  },30);
+};
+$('roomPassInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('roomBtn').click()});
+
+/* ============ 发送 ============ */
+function sendMessage(){
+  if(!cryptoKey)return;
+  const input=$('msgInput');
+  const text=input.value.trim();
+  if(!text)return;
+  const id=Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  publishMessage(id,text);
+  input.value='';
+  renderMessages(loadMessages());
+}
+$('sendBtn').onclick=sendMessage;
+$('msgInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}
+});
+
+/* ============ 退出 ============ */
+$('logoutBtn').onclick=()=>{
+  if(!confirm('退出后需要重新输入密码，确定？'))return;
+  disconnectMQTT();
+  cryptoKey=null;nickname='';roomTopic='';seenIds=new Set();pendingQueue=[];
+  $('roomPassInput').value='';
+  $('msgInput').value='';
+  goToRoomScreen();
+};
+
+/* ============ iOS 键盘适配 ============ */
+if(window.visualViewport){
+  const vv=window.visualViewport;
+  const adjust=()=>{
+    const chat=$('chatScreen');
+    if(!chat.classList.contains('active'))return;
+    const kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);
+    $('inputBar').style.transform=kb>0?`translateY(-${kb}px)`:'';
+    if(kb>0){const box=$('messages');setTimeout(()=>{box.scrollTop=box.scrollHeight},50)}
+  };
+  vv.addEventListener('resize',adjust);
+  vv.addEventListener('scroll',adjust);
+}
+
+/* ============ 初始化 ============ */
+(function init(){
+  if(localStorage.getItem(KEY_ACTIVATED)==='1')goToRoomScreen();
+  else showScreen('kamiScreen');
+  document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
+})();
+</script>
+</body>
+</html>
