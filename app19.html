@@ -636,7 +636,7 @@ function randomBytes(n){const b=new Uint8Array(n);if(window.crypto&&window.crypt
 const CONFIG={
   VERSION:'tgchat-v19',DATA_VERSION:1,
   VALID_KAMIS:['电报卡密-2025-甲一甲一-壹壹壹壹','电报卡密-2025-乙二乙二-贰贰贰贰','电报卡密-2025-丙三丙三-叁叁叁叁'],
-  MQTT_URL:'wss://broker.emqx.io:8084/mqtt',
+  MQTT_URL:'wss://8.219.163.239.nip.io/mqtt',
   CHUNK_SIZE:48*1024,CHUNK_DELAY:80,MAX_FILE_SIZE:50*1024*1024,MEDIA_TIMEOUT:120000,ONLINE_TIMEOUT:70000,MAX_MEMBERS:6,MAX_MSGS_PER_GROUP:1000,
   EMOJIS:['👍','❤️','😂','😮','😢','🔥','🎉','👏','💯','🤔','😎','🙏','👀','✨','🥰'],
   KEYS:{ACTIVATED:'tg_kami_activated',USERS:'tg_users',CURRENT:'tg_current_user',GROUPS:'tg_groups',CONTACTS:'tg_contacts',THEME:'tg_theme',FONT:'tg_font',NAV:'tg_nav',MSG_SYNC:'tg_msg_sync',PROFILE_PREFIX:'tg_profile_',GROUP_AVATAR_PREFIX:'tg_group_avatar_',DELETED_PREFIX:'tg_deleted_g_',MSGS_PREFIX:'tg_msgs_g_',READS_PREFIX:'tg_reads_g_',REACTS_PREFIX:'tg_reacts_g_'}
