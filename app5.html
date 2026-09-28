@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#17212b">
+<title>电报加密群聊</title>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Helvetica Neue',sans-serif;background:#0e1621;color:#fff;overflow:hidden;-webkit-font-smoothing:antialiased;touch-action:manipulation}
+.screen{display:none;flex-direction:column;position:fixed;inset:0;height:100dvh;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0)}
+.screen.active{display:flex}
+.auth-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.auth-box{width:100%;max-width:400px}
+.logo{font-size:60px;text-align:center;margin-bottom:12px}
+.title{font-size:24px;font-weight:600;text-align:center}
+.subtitle{color:#8e8e93;font-size:14px;text-align:center;margin:8px 0 24px;line-height:1.5}
+.input{width:100%;background:#242f3d;border:1px solid #2b3a4a;border-radius:12px;padding:14px 16px;color:#fff;font-size:16px;margin-bottom:14px;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .2s}
+.input:focus{border-color:#5288c1}
+.input::placeholder{color:#6b7a88}
+.btn{width:100%;background:#5288c1;border:none;border-radius:12px;padding:15px;color:#fff;font-size:17px;font-weight:600;cursor:pointer;-webkit-appearance:none;appearance:none;transition:opacity .15s,background .15s}
+.btn:active{opacity:.8;background:#4a7ab0}
+.btn:disabled{opacity:.5}
+.btn-secondary{background:transparent;border:1px solid #5288c1;color:#5288c1;margin-top:10px}
+.btn-qq{background:#12b7f5;margin-top:10px}
+.tab-bar{display:flex;margin-bottom:20px;border-bottom:1px solid #2b3a4a}
+.tab{flex:1;text-align:center;padding:12px 0;color:#8e8e93;cursor:pointer;font-size:16px;font-weight:600;transition:color .2s;border-bottom:2px solid transparent}
+.tab.active{color:#5288c1;border-bottom-color:#5288c1}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.error{color:#e74c3c;font-size:14px;margin-bottom:12px;text-align:center;min-height:20px}
+.hint{color:#8e8e93;font-size:12px;margin-top:16px;text-align:center;line-height:1.9}
+.hint code{background:#242f3d;padding:2px 6px;border-radius:4px;color:#7fb3e0;font-size:12px}
+.avatar-picker{text-align:center;margin:8px 0 20px}
+.avatar-preview{width:100px;height:100px;border-radius:50%;background:#242f3d;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;border:2px dashed #2b3a4a;transition:border-color .2s;position:relative}
+.avatar-preview:hover{border-color:#5288c1}
+.avatar-preview img{width:100%;height:100%;object-fit:cover}
+.avatar-preview .plus{font-size:32px;color:#6b7a88}
+.avatar-tip{font-size:12px;color:#8e8e93;margin-top:8px}
+.avatar-tip.required{color:#e74c3c}
+.list-header{display:flex;align-items:center;padding:10px 14px;background:#242f3d;border-bottom:1px solid #2b3a4a;flex-shrink:0;gap:10px}
+.list-header .menu-btn{background:none;border:none;color:#8e8e93;font-size:22px;cursor:pointer;padding:6px;-webkit-appearance:none}
+.list-header .list-title{flex:1;font-size:20px;font-weight:700;color:#fff}
+.list-header .add-btn{background:none;border:none;color:#5288c1;font-size:28px;cursor:pointer;padding:0 6px;line-height:1;-webkit-appearance:none}
+.list-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.group-item{display:flex;align-items:center;padding:12px 16px;cursor:pointer;transition:background .15s;position:relative}
+.group-item:active{background:#1a2432}
+.group-avatar{width:52px;height:52px;border-radius:50%;background:#5288c1;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;flex-shrink:0;margin-right:12px;overflow:hidden}
+.group-avatar img{width:100%;height:100%;object-fit:cover}
+.group-info{flex:1;min-width:0}
+.group-name-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.group-name{font-size:16px;font-weight:600;color:#fff;flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group-time{font-size:12px;color:#8e8e93;flex-shrink:0}
+.group-preview{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.group-preview-text{font-size:14px;color:#8e8e93;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.unread-count{background:#5288c1;color:#fff;font-size:11px;font-weight:600;min-width:20px;height:20px;line-height:20px;text-align:center;border-radius:10px;padding:0 6px;flex-shrink:0}
+.empty-state{text-align:center;padding:80px 24px;color:#8e8e93}
+.empty-state .icon{font-size:64px;margin-bottom:16px;opacity:.5}
+.empty-state .text{font-size:15px;line-height:1.6}
+.empty-state .big-btn{margin-top:24px;display:inline-block;background:#5288c1;color:#fff;padding:12px 28px;border-radius:12px;font-weight:600;cursor:pointer;border:none;-webkit-appearance:none}
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;opacity:0;pointer-events:none;transition:opacity .25s}
+.drawer-overlay.show{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;left:0;bottom:0;width:280px;max-width:80vw;background:#17212b;z-index:50;transform:translateX(-100%);transition:transform .25s;box-shadow:4px 0 24px rgba(0,0,0,.5);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0)}
+.drawer.show{transform:translateX(0)}
+.drawer-header{background:#242f3d;padding:20px 18px 24px}
+.drawer-avatar{width:70px;height:70px;border-radius:50%;background:#5288c1;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600;overflow:hidden;cursor:pointer;margin-bottom:14px}
+.drawer-avatar img{width:100%;height:100%;object-fit:cover}
+.drawer-name{font-size:17px;font-weight:600;color:#fff;margin-bottom:4px}
+.drawer-sub{font-size:12px;color:#8e8e93}
+.drawer-menu{padding:8px 0;border-top:1px solid #2b3a4a}
+.drawer-item{padding:14px 20px;font-size:15px;cursor:pointer;color:#fff;transition:background .15s;display:flex;align-items:center;gap:12px}
+.drawer-item:active{background:#242f3d}
+.drawer-item.danger{color:#e74c3c}
+.chat-header{display:flex;align-items:center;padding:10px 8px 10px 4px;background:#242f3d;border-bottom:1px solid #2b3a4a;flex-shrink:0;position:relative}
+.chat-header .back-btn{background:none;border:none;color:#5288c1;font-size:24px;cursor:pointer;padding:6px 10px;-webkit-appearance:none;line-height:1}
+.chat-header .info{flex:1;min-width:0;cursor:pointer}
+.chat-header .name{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-header .status{font-size:12px;color:#8e8e93;margin-top:2px;display:flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;background:#f39c12;display:inline-block}
+.dot.online{background:#27ae60}
+.dot.offline{background:#e74c3c}
+.chat-header .menu-btn{background:none;border:none;color:#8e8e93;font-size:20px;cursor:pointer;padding:8px;-webkit-appearance:none}
+.unread-badge{position:absolute;top:6px;left:52px;background:#e74c3c;color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:18px;height:18px;line-height:18px;text-align:center;padding:0 5px;display:none}
+.unread-badge.show{display:block}
+.messages{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 10px;display:flex;flex-direction:column;gap:8px}
+.msg-row{display:flex;align-items:flex-end;gap:8px;max-width:88%}
+.msg-row.mine{align-self:flex-end;flex-direction:row-reverse}
+.msg-row.other{align-self:flex-start}
+.msg-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:#242f3d;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#7fb3e0;cursor:pointer}
+.msg-avatar img{width:100%;height:100%;object-fit:cover}
+.msg{flex:1;min-width:0;padding:8px 12px;border-radius:16px;word-wrap:break-word;word-break:break-word;animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.msg.mine{background:#2b5278;border-bottom-right-radius:5px}
+.msg.other{background:#182533;border-bottom-left-radius:5px}
+.msg.media-msg{padding:4px}
+.msg .sender{font-size:12px;color:#7fb3e0;margin-bottom:2px;font-weight:600;padding:0 4px;cursor:pointer}
+.msg .text{font-size:15px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;padding:0 4px}
+.msg .meta{font-size:11px;color:rgba(255,255,255,.45);text-align:right;margin-top:3px;padding:0 6px;display:flex;justify-content:flex-end;align-items:center;gap:6px}
+.msg .read-status{color:#7fb3e0;font-size:11px}
+.msg .read-status.all-read{color:#4fc3f7}
+.msg.error .text{color:#e74c3c;font-style:italic}
+.msg .pending{color:#f39c12;font-size:11px;margin-left:6px}
+.msg .media{max-width:100%;border-radius:12px;display:block;margin:0}
+.msg .media img,.msg .media video{max-width:100%;max-height:300px;border-radius:12px;display:block}
+.msg .media-loading{width:180px;height:120px;display:flex;align-items:center;justify-content:center;background:#0e1621;border-radius:12px;color:#8e8e93;font-size:12px;text-align:center;padding:8px}
+.msg .media-fail{width:180px;height:120px;display:flex;align-items:center;justify-content:center;background:#2a1a1a;border-radius:12px;color:#e74c3c;font-size:12px;text-align:center;padding:8px;flex-direction:column;gap:6px}
+.msg .media-fail button{background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+.sys-msg{text-align:center;color:#8e8e93;font-size:12px;padding:8px 16px;line-height:1.6}
+.input-bar{display:flex;gap:6px;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0));background:#242f3d;border-top:1px solid #2b3a4a;flex-shrink:0;align-items:center}
+.input-bar input[type=text]{flex:1;background:#17212b;border:none;border-radius:20px;padding:10px 16px;color:#fff;font-size:16px;outline:none;-webkit-appearance:none;appearance:none;min-width:0}
+.input-bar input[type=text]::placeholder{color:#6b7a88}
+.attach-btn{background:none;border:none;color:#8e8e93;font-size:26px;cursor:pointer;padding:0 6px;flex-shrink:0;line-height:1;-webkit-appearance:none;display:flex;align-items:center}
+.attach-btn:active{color:#5288c1}
+.attach-btn:disabled{opacity:.3}
+.send-btn{background:#5288c1;border:none;border-radius:20px;padding:10px 18px;color:#fff;font-weight:600;cursor:pointer;font-size:15px;flex-shrink:0;-webkit-appearance:none;transition:opacity .15s}
+.send-btn:active{opacity:.8}
+.send-btn:disabled{opacity:.4}
+.upload-banner{position:absolute;left:12px;right:12px;bottom:70px;background:rgba(43,82,120,.95);border-radius:10px;padding:8px 14px;font-size:13px;color:#fff;text-align:center;display:none;z-index:10}
+.upload-banner.show{display:block}
+.upload-banner.error{background:rgba(160,40,40,.95)}
+.online-panel{position:absolute;top:60px;left:12px;right:12px;background:#242f3d;border-radius:12px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:20;display:none;border:1px solid #2b3a4a;max-height:60vh;overflow-y:auto}
+.online-panel.show{display:block}
+.online-panel .panel-title{font-size:14px;color:#8e8e93;margin-bottom:10px}
+.online-panel .user-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:15px}
+.online-panel .user-dot{width:8px;height:8px;border-radius:50%;background:#27ae60;flex-shrink:0}
+.online-panel .user-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;background:#5288c1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer}
+.online-panel .user-avatar img{width:100%;height:100%;object-fit:cover}
+.online-panel .user-name{flex:1}
+.online-panel .user-tag{font-size:11px;color:#8e8e93}
+.online-panel .close-btn{position:absolute;top:10px;right:14px;background:none;border:none;color:#8e8e93;font-size:18px;cursor:pointer;padding:4px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.show{display:flex}
+.modal-box{background:#17212b;border-radius:16px;padding:24px;width:100%;max-width:380px;border:1px solid #2b3a4a}
+.modal-title{font-size:18px;font-weight:600;margin-bottom:16px;text-align:center}
+.modal-box .input{margin-bottom:14px}
+.modal-actions{display:flex;gap:10px;margin-top:6px}
+.modal-actions .btn{flex:1}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:24px}
+.lightbox.show{display:flex}
+.lightbox img{max-width:90vw;max-height:70vh;border-radius:12px}
+.lightbox .lb-name{color:#fff;font-size:18px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div id="kamiScreen" class="screen active">
+  <div class="auth-wrap"><div class="auth-box">
+    <div class="logo">✈️</div>
+    <div class="title">电报加密群聊</div>
+    <div class="subtitle">请输入卡密以继续</div>
+    <div class="error" id="kamiError"></div>
+    <input id="kamiInput" class="input" placeholder="电报卡密-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <button id="kamiBtn" class="btn">验 证</button>
+    <div class="hint">演示卡密：<br><code>电报卡密-2025-甲一甲一-壹壹壹壹</code><br><code>电报卡密-2025-乙二乙二-贰贰贰贰</code><br><code>电报卡密-2025-丙三丙三-叁叁叁叁</code></div>
+  </div></div>
+</div>
+
+<div id="authScreen" class="screen">
+  <div class="auth-wrap"><div class="auth-box">
+    <div class="logo">👤</div>
+    <div class="tab-bar">
+      <div class="tab active" id="tabLogin">登录</div>
+      <div class="tab" id="tabRegister">注册</div>
+    </div>
+    <div class="error" id="authError"></div>
+    <div class="tab-content active" id="loginPanel">
+      <input id="loginNick" class="input" placeholder="昵称" autocomplete="username" spellcheck="false" maxlength="12">
+      <input id="loginPass" class="input" type="password" placeholder="密码" autocomplete="current-password">
+      <button id="loginBtn" class="btn">登 录</button>
+      <button id="qqLoginBtn" class="btn btn-qq">使用 QQ 登录</button>
+      <div class="hint">QQ 登录需要后端服务器和 QQ 互联审核</div>
+    </div>
+    <div class="tab-content" id="registerPanel">
+      <div class="avatar-picker">
+        <div class="avatar-preview" id="avatarPreview"><span class="plus">＋</span></div>
+        <input type="file" id="avatarFile" accept="image/*" style="display:none">
+        <div class="avatar-tip required" id="avatarTip">点击上传头像（必填）</div>
+      </div>
+      <input id="regNick" class="input" placeholder="昵称（最多 12 字）" autocomplete="off" spellcheck="false" maxlength="12">
+      <input id="regPass" class="input" type="password" placeholder="密码（至少 6 位）" autocomplete="new-password">
+      <input id="regPass2" class="input" type="password" placeholder="确认密码" autocomplete="new-password">
+      <button id="registerBtn" class="btn">注 册</button>
+      <div class="hint">账户保存在本机，换设备需重新注册</div>
+    </div>
+  </div></div>
+</div>
+
+<div id="chatListScreen" class="screen">
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div class="drawer-avatar" id="drawerAvatar">A</div>
+      <div class="drawer-name" id="drawerName">昵称</div>
+      <div class="drawer-sub">点击头像可更换</div>
+    </div>
+    <div class="drawer-menu">
+      <div class="drawer-item" id="drawerRefresh">🔄 刷新列表</div>
+      <div class="drawer-item danger" id="drawerLogout">🚪 退出登录</div>
+    </div>
+  </div>
+  <div class="list-header">
+    <button class="menu-btn" id="menuBtn">☰</button>
+    <div class="list-title">电报</div>
+    <button class="add-btn" id="addGroupBtn">＋</button>
+  </div>
+  <div class="list-body" id="groupList"></div>
+
+  <div class="modal-overlay" id="joinModal">
+    <div class="modal-box">
+      <div class="modal-title">加入加密群组</div>
+      <input id="joinName" class="input" placeholder="群组名称（例如：家人群）" maxlength="20" autocomplete="off">
+      <input id="joinPass" class="input" type="password" placeholder="群组密码（至少 6 位）" autocomplete="new-password">
+      <div class="error" id="joinError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="joinCancel" style="margin-top:0">取消</button>
+        <button class="btn" id="joinConfirm">加入</button>
+      </div>
+      <div class="hint">群名和密码完全相同的人才能互相聊天</div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="delModal">
+    <div class="modal-box">
+      <div class="modal-title">删除群组</div>
+      <div class="hint" style="margin-bottom:16px" id="delHint"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="delCancel" style="margin-top:0">取消</button>
+        <button class="btn" id="delConfirm" style="background:#e74c3c">删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="chatScreen" class="screen">
+  <div class="chat-header">
+    <button class="back-btn" id="backBtn">‹</button>
+    <div class="info" id="headerInfo">
+      <div class="name" id="chatGroupName">群组名</div>
+      <div class="status"><span class="dot" id="statusDot"></span><span id="statusLabel">连接中...</span></div>
+    </div>
+    <button class="menu-btn" id="chatMenuBtn">⋮</button>
+    <span class="unread-badge" id="unreadBadge">0</span>
+  </div>
+  <div class="online-panel" id="onlinePanel">
+    <button class="close-btn" id="onlineClose">✕</button>
+    <div class="panel-title">在线成员</div>
+    <div id="onlineList"></div>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="upload-banner" id="uploadBanner"></div>
+  <div class="input-bar" id="inputBar">
+    <button class="attach-btn" id="attachBtn" title="发送图片或视频">＋</button>
+    <input type="file" id="fileInput" accept="image/*,video/*" style="display:none">
+    <input type="text" id="msgInput" placeholder="输入消息..." autocomplete="off" autocapitalize="sentences" enterkeyhint="send">
+    <button class="send-btn" id="sendBtn">发送</button>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" src="">
+  <div class="lb-name" id="lightboxName"></div>
+</div>
+
+<script>
+/* ============ SHA-256 ============ */
+const SHA256_K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function rotr(x,n){return((x>>>n)|(x<<(32-n)))>>>0}
+function sha256(data){
+  if(typeof data==='string')data=new TextEncoder().encode(data);
+  const l=data.length,bitLen=l*8,padLen=((l+9+63)&~63);
+  const padded=new Uint8Array(padLen);padded.set(data);padded[l]=0x80;
+  const view=new DataView(padded.buffer);
+  view.setUint32(padLen-4,bitLen>>>0,false);
+  view.setUint32(padLen-8,Math.floor(bitLen/0x100000000),false);
+  let H0=0x6a09e667,H1=0xbb67ae85,H2=0x3c6ef372,H3=0xa54ff53a,H4=0x510e527f,H5=0x9b05688c,H6=0x1f83d9ab,H7=0x5be0cd19;
+  const w=new Uint32Array(64);
+  for(let i=0;i<padLen;i+=64){
+    for(let j=0;j<16;j++)w[j]=view.getUint32(i+j*4,false);
+    for(let j=16;j<64;j++){
+      const s0=rotr(w[j-15],7)^rotr(w[j-15],18)^(w[j-15]>>>3);
+      const s1=rotr(w[j-2],17)^rotr(w[j-2],19)^(w[j-2]>>>10);
+      w[j]=(w[j-16]+s0+w[j-7]+s1)>>>0;
+    }
+    let a=H0,b=H1,c=H2,d=H3,e=H4,f=H5,g=H6,h=H7;
+    for(let j=0;j<64;j++){
+      const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);
+      const ch=(e&f)^(~e&g);
+      const t1=(h+S1+ch+SHA256_K[j]+w[j])>>>0;
+      const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);
+      const maj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+maj)>>>0;
+      h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
+    }
+    H0=(H0+a)>>>0;H1=(H1+b)>>>0;H2=(H2+c)>>>0;H3=(H3+d)>>>0;
+    H4=(H4+e)>>>0;H5=(H5+f)>>>0;H6=(H6+g)>>>0;H7=(H7+h)>>>0;
+  }
+  const out=new Uint8Array(32),ov=new DataView(out.buffer);
+  [H0,H1,H2,H3,H4,H5,H6,H7].forEach((v,i)=>ov.setUint32(i*4,v,false));
+  return out;
+}
+
+/* ============ 加密 ============ */
+const MAGIC=new Uint8Array([0x54,0x47,0x4D,0x00]);
+const SALT=new TextEncoder().encode('tg-encrypted-chat-salt-v1');
+const PBKDF2_ITER=2000;
+function concatBytes(){let t=0;for(let i=0;i<arguments.length;i++)t+=arguments[i].length;const o=new Uint8Array(t);let off=0;for(let i=0;i<arguments.length;i++){o.set(arguments[i],off);off+=arguments[i].length}return o}
+function intToBytes(n){const b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,false);return b}
+function b64encode(bytes){let s='';const CH=0x8000;for(let i=0;i<bytes.length;i+=CH){s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH))}return btoa(s)}
+function b64decode(str){const bin=atob(str);const out=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out}
+function bytesToHex(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=bytes[i].toString(16).padStart(2,'0');return s}
+function deriveKey(password){const pw=new TextEncoder().encode(password);let key=sha256(concatBytes(pw,SALT));for(let i=0;i<PBKDF2_ITER;i++)key=sha256(concatBytes(key,SALT,intToBytes(i)));return key}
+function xorStream(key,iv,data){const out=new Uint8Array(data.length);for(let i=0;i<data.length;i+=32){const block=sha256(concatBytes(key,iv,intToBytes(i>>>5)));const end=Math.min(i+32,data.length);for(let j=i;j<end;j++)out[j]=data[j]^block[j-i]}return out}
+function encryptString(key,iv,str){const pt=concatBytes(MAGIC,new TextEncoder().encode(str));return xorStream(key,iv,pt)}
+function decryptString(key,iv,ct){const pt=xorStream(key,iv,ct);if(pt.length<4||pt[0]!==MAGIC[0]||pt[1]!==MAGIC[1]||pt[2]!==MAGIC[2]||pt[3]!==MAGIC[3])throw new Error('decrypt failed');return new TextDecoder().decode(pt.subarray(4))}
+function randomBytes(n){const b=new Uint8Array(n);if(window.crypto&&window.crypto.getRandomValues){window.crypto.getRandomValues(b)}else{for(let i=0;i<n;i++)b[i]=Math.floor(Math.random()*256)}return b}
+
+/* ============ 配置 ============ */
+const VALID_KAMIS=['电报卡密-2025-甲一甲一-壹壹壹壹','电报卡密-2025-乙二乙二-贰贰贰贰','电报卡密-2025-丙三丙三-叁叁叁叁'];
+const KEY_ACTIVATED='tg_kami_activated';
+const KEY_USERS='tg_users';
+const KEY_CURRENT='tg_current_user';
+const KEY_GROUPS='tg_groups';
+const MQTT_URL='wss://broker.emqx.io:8084/mqtt';
+const CHUNK_SIZE=32*1024;        // 32KB，比之前 48KB 更小，丢包概率低
+const CHUNK_DELAY=60;             // 60ms 间隔，让 broker 喘口气
+const MAX_FILE_SIZE=20*1024*1024;
+const MEDIA_TIMEOUT=45000;        // 45 秒收不齐就放弃
+const ONLINE_TIMEOUT=70000;
+const MAX_MEMBERS=6;
+
+/* ============ 状态 ============ */
+let cryptoKey=null, nickname='', myAvatarData=null;
+let currentGroup=null;
+let mqttClient=null, roomTopic='', msgStorageKey='', readStorageKey='';
+let seenIds=new Set();
+let pendingQueue=[];
+let incomingMedia={};
+let idb=null;
+let onlineUsers={};
+let userAvatars={};
+let readReceipts={};
+let heartbeatTimer=null, cleanupTimer=null;
+let unreadCount=0;
+let pendingRegAvatar=null;
+let deleteTargetId=null;
+
+/* ============ 工具 ============ */
+const $=id=>document.getElementById(id);
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active')}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setStatus(state,text){$('statusDot').className='dot '+state;$('statusLabel').textContent=text}
+function showBanner(text,isError){const b=$('uploadBanner');b.textContent=text;b.classList.add('show');b.classList.toggle('error',!!isError)}
+function hideBanner(){const b=$('uploadBanner');b.classList.remove('show');b.classList.remove('error')}
+function chatVisible(){return document.visibilityState==='visible'&&$('chatScreen').classList.contains('active')}
+function timeStr(t){
+  const d=new Date(t), now=new Date();
+  const sameDay=d.toDateString()===now.toDateString();
+  if(sameDay)return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const y=new Date(now);y.setDate(y.getDate()-1);
+  if(d.toDateString()===y.toDateString())return '昨天';
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+/* ============ IndexedDB ============ */
+function openIDB(){
+  return new Promise((resolve,reject)=>{
+    if(idb)return resolve(idb);
+    const req=indexedDB.open('tgchat_media',1);
+    req.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('media'))db.createObjectStore('media',{keyPath:'id'})};
+    req.onsuccess=e=>{idb=e.target.result;resolve(idb)};
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbPut(record){
+  const db=await openIDB();
+  return new Promise((res,rej)=>{const tx=db.transaction('media','readwrite');tx.objectStore('media').put(record);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});
+}
+async function idbGet(id){
+  const db=await openIDB();
+  return new Promise((res,rej)=>{const tx=db.transaction('media','readonly');const r=tx.objectStore('media').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+}
+async function idbDelete(id){
+  try{
+    const db=await openIDB();
+    return new Promise((res)=>{
+      const tx=db.transaction('media','readwrite');
+      tx.objectStore('media').delete(id);
+      tx.oncomplete=()=>res();tx.onerror=()=>res();
+    });
+  }catch{}
+}
+
+/* ============ 账户 ============ */
+function loadUsers(){try{return JSON.parse(localStorage.getItem(KEY_USERS)||'{}')}catch{return{}}}
+function saveUsers(u){localStorage.setItem(KEY_USERS,JSON.stringify(u))}
+function hashPass(salt,pass){return bytesToHex(sha256(salt+pass))}
+
+function compressImage(file,size=128,quality=0.75){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          canvas.width=size;canvas.height=size;
+          const ctx=canvas.getContext('2d');
+          const s=Math.min(img.width,img.height);
+          const sx=(img.width-s)/2,sy=(img.height-s)/2;
+          ctx.drawImage(img,sx,sy,s,s,0,0,size,size);
+          resolve(canvas.toDataURL('image/jpeg',quality));
+        }catch(err){reject(err)}
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function registerUser(nick,pass,avatarDataUrl){
+  const users=loadUsers();
+  if(users[nick])throw new Error('昵称已被注册');
+  const salt=bytesToHex(randomBytes(16));
+  const passHash=hashPass(salt,pass);
+  users[nick]={passHash,salt,createdAt:Date.now()};
+  saveUsers(users);
+  await idbPut({id:'avatar_self_'+nick,data:avatarDataUrl,time:Date.now()});
+  return true;
+}
+function verifyLogin(nick,pass){
+  const users=loadUsers();
+  if(!users[nick])throw new Error('用户不存在');
+  const u=users[nick];
+  if(hashPass(u.salt,pass)!==u.passHash)throw new Error('密码错误');
+  return true;
+}
+async function getMyAvatar(nick){try{const r=await idbGet('avatar_self_'+nick);return r?r.data:null}catch{return null}}
+async function getRemoteAvatar(nick){try{const r=await idbGet('avatar_remote_'+nick);return r?r.data:null}catch{return null}}
+
+/* ============ 群组管理 ============ */
+function loadGroups(){try{return JSON.parse(localStorage.getItem(KEY_GROUPS)||'[]')}catch{return[]}}
+function saveGroups(list){localStorage.setItem(KEY_GROUPS,JSON.stringify(list))}
+function groupId(name,pass){return bytesToHex(sha256('group:'+name+':'+pass)).slice(0,16)}
+function addGroupRecord(name,pass){
+  const list=loadGroups();
+  const id=groupId(name,pass);
+  if(list.find(g=>g.id===id))return{id,existed:true};
+  list.push({id,name,pass,lastMsg:'',lastTime:Date.now(),unread:0});
+  saveGroups(list);
+  return{id,existed:false};
+}
+function updateGroupRecord(id,fields){
+  const list=loadGroups();
+  const g=list.find(x=>x.id===id);
+  if(!g)return;
+  Object.assign(g,fields);
+  saveGroups(list);
+}
+function removeGroupRecord(id){
+  const list=loadGroups().filter(g=>g.id!==id);
+  saveGroups(list);
+}
+
+/* ============ 聊天列表渲染 ============ */
+function renderGroupList(){
+  const list=loadGroups();
+  const box=$('groupList');
+  box.innerHTML='';
+  if(list.length===0){
+    box.innerHTML=`<div class="empty-state"><div class="icon">💬</div><div class="text">还没有加入任何群组</div><div class="text" style="margin-top:8px;font-size:13px">点击 + 输入群名和密码加入</div><button class="big-btn" onclick="document.getElementById('addGroupBtn').click()">加入群组</button></div>`;
+    return;
+  }
+  list.sort((a,b)=>(b.lastTime||0)-(a.lastTime||0));
+  for(const g of list){
+    const el=document.createElement('div');
+    el.className='group-item';
+    const initial=g.name.charAt(0).toUpperCase();
+    el.innerHTML=`<div class="group-avatar">${escapeHtml(initial)}</div><div class="group-info"><div class="group-name-row"><div class="group-name">${escapeHtml(g.name)}</div><div class="group-time">${g.lastTime?timeStr(g.lastTime):''}</div></div><div class="group-preview"><div class="group-preview-text">${escapeHtml(g.lastMsg||'还没有消息')}</div>${g.unread>0?`<div class="unread-count">${g.unread>99?'99+':g.unread}</div>`:''}</div></div>`;
+    let longPressTimer=null;
+    const startPress=()=>{longPressTimer=setTimeout(()=>{openDeleteModal(g.id,g.name)},600)};
+    const cancelPress=()=>{if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null}};
+    el.addEventListener('touchstart',startPress,{passive:true});
+    el.addEventListener('touchend',cancelPress);
+    el.addEventListener('touchmove',cancelPress);
+    el.addEventListener('mousedown',startPress);
+    el.addEventListener('mouseup',cancelPress);
+    el.addEventListener('mouseleave',cancelPress);
+    el.addEventListener('click',()=>{cancelPress();enterGroup(g.id)});
+    box.appendChild(el);
+  }
+}
+
+/* ============ 进入/离开群组 ============ */
+async function enterGroup(id){
+  const list=loadGroups();
+  const g=list.find(x=>x.id===id);
+  if(!g)return;
+  updateGroupRecord(id,{unread:0});
+  currentGroup={id:g.id,name:g.name,pass:g.pass};
+  cryptoKey=deriveKey(g.pass);
+  seenIds=new Set();
+  pendingQueue=[];
+  incomingMedia={};
+  onlineUsers={};
+  userAvatars={};
+  readReceipts={};
+  unreadCount=0;
+  msgStorageKey='tg_msgs_g_'+id;
+  readStorageKey='tg_reads_g_'+id;
+  rebuildSeenIds();
+  loadReadReceipts();
+  const users=loadUsers();
+  for(const n in users){
+    if(n===nickname)continue;
+    const av=await getRemoteAvatar(n);
+    if(av)userAvatars[n]=av;
+  }
+  $('chatGroupName').textContent=g.name;
+  setStatus('','连接中...');
+  showScreen('chatScreen');
+  updateUnreadBadge();
+  await renderMessages(loadMessages());
+  connectMQTT(g);
+  setTimeout(()=>$('msgInput').focus(),100);
+}
+
+function leaveGroup(){
+  disconnectMQTT();
+  cryptoKey=null;currentGroup=null;roomTopic='';msgStorageKey='';readStorageKey='';
+  seenIds=new Set();pendingQueue=[];incomingMedia={};
+  onlineUsers={};userAvatars={};readReceipts={};unreadCount=0;
+  $('msgInput').value='';
+  $('onlinePanel').classList.remove('show');
+  updateUnreadBadge();
+  renderGroupList();
+  showScreen('chatListScreen');
+}
+
+/* ============ 消息存储 ============ */
+function loadMessages(){
+  const raw=localStorage.getItem(msgStorageKey);
+  if(!raw)return[];
+  let encrypted;try{encrypted=JSON.parse(raw)}catch{return[]}
+  const result=[];
+  for(const item of encrypted){
+    try{
+      const plain=decryptString(cryptoKey,b64decode(item.iv),b64decode(item.ct));
+      const obj=JSON.parse(plain);
+      result.push({id:item.id,time:item.time,sender:obj.sender,text:obj.text,mediaType:obj.mediaType,mimeType:obj.mimeType,pending:item.pending,failed:item.failed});
+    }catch{result.push({id:item.id,time:item.time,sender:'?',text:'[无法解密]',error:true})}
+  }
+  return result;
+}
+function saveLocal(id,ivBytes,ctBytes,time,pending){
+  const raw=localStorage.getItem(msgStorageKey);
+  const arr=raw?JSON.parse(raw):[];
+  arr.push({id,iv:b64encode(ivBytes),ct:b64encode(ctBytes),time,pending:!!pending});
+  if(arr.length>500)arr.splice(0,arr.length-500);
+  try{localStorage.setItem(msgStorageKey,JSON.stringify(arr))}
+  catch{arr.splice(0,100);try{localStorage.setItem(msgStorageKey,JSON.stringify(arr))}catch{}}
+}
+function markSent(id){
+  const raw=localStorage.getItem(msgStorageKey);if(!raw)return;
+  try{const arr=JSON.parse(raw);const m=arr.find(x=>x.id===id);if(m){m.pending=false;localStorage.setItem(msgStorageKey,JSON.stringify(arr))}}catch{}
+}
+function rebuildSeenIds(){
+  seenIds=new Set();
+  const raw=localStorage.getItem(msgStorageKey);if(!raw)return;
+  try{const arr=JSON.parse(raw);arr.forEach(m=>seenIds.add(m.id))}catch{}
+}
+
+/* ============ 已读回执 ============ */
+function loadReadReceipts(){
+  readReceipts={};
+  try{const raw=localStorage.getItem(readStorageKey);if(raw){const obj=JSON.parse(raw);for(const id in obj)readReceipts[id]=new Set(obj[id])}}catch{}
+}
+function saveReadReceipts(){
+  try{const s={};for(const id in readReceipts)s[id]=Array.from(readReceipts[id]);localStorage.setItem(readStorageKey,JSON.stringify(s))}catch{}
+}
+
+/* ============ 加密发送 ============ */
+function sendEncrypted(obj){
+  if(!mqttClient||!mqttClient.connected||!cryptoKey)return false;
+  const iv=randomBytes(16);
+  const ct=encryptString(cryptoKey,iv,JSON.stringify(obj));
+  mqttClient.publish(roomTopic,concatBytes(iv,ct),{qos:0});
+  return true;
+}
+
+/* ============ 在线状态 ============ */
+function broadcastPresence(includeAvatar){
+  const msg={type:'presence',nickname,time:Date.now()};
+  if(includeAvatar&&myAvatarData)msg.avatar=myAvatarData;
+  sendEncrypted(msg);
+}
+function broadcastOffline(){sendEncrypted({type:'offline',nickname,time:Date.now()})}
+
+async function handlePresence(obj){
+  const isNew=!onlineUsers[obj.nickname];
+  onlineUsers[obj.nickname]=Date.now();
+  if(obj.avatar&&obj.nickname!==nickname){
+    userAvatars[obj.nickname]=obj.avatar;
+    await idbPut({id:'avatar_remote_'+obj.nickname,data:obj.avatar,time:Date.now()});
+  }
+  if(isNew&&obj.nickname!==nickname){
+    broadcastPresence(true);
+    const count=getMemberCount();
+    if(count>MAX_MEMBERS){showBanner(`⚠️ 当前 ${count} 人在线（超过 6 人）`,true);setTimeout(hideBanner,3000)}
+  }
+  updateOnlineDisplay();
+}
+function handleOffline(obj){delete onlineUsers[obj.nickname];updateOnlineDisplay()}
+function cleanupOfflineUsers(){
+  const now=Date.now();let changed=false;
+  for(const nick in onlineUsers){if(now-onlineUsers[nick]>ONLINE_TIMEOUT){delete onlineUsers[nick];changed=true}}
+  if(changed)updateOnlineDisplay();
+}
+function getMemberCount(){const s=new Set(Object.keys(onlineUsers));s.add(nickname);return s.size}
+
+async function updateOnlineDisplay(){
+  const all=new Set(Object.keys(onlineUsers));all.add(nickname);
+  const count=all.size;
+  const names=Array.from(all).sort();
+  setStatus('online',`${count} 人在线 · 端到端加密`);
+  const box=$('onlineList');box.innerHTML='';
+  for(const n of names){
+    const avatarData=(n===nickname)?myAvatarData:userAvatars[n];
+    const row=document.createElement('div');
+    row.className='user-row';
+    const dot=document.createElement('span');dot.className='user-dot';row.appendChild(dot);
+    const av=document.createElement('div');av.className='user-avatar';
+    av.innerHTML=avatarData?`<img src="${avatarData}">`:escapeHtml(n.charAt(0).toUpperCase());
+    av.onclick=()=>{if(avatarData)showLightbox(avatarData,n)};
+    row.appendChild(av);
+    const nm=document.createElement('span');nm.className='user-name';nm.textContent=n;row.appendChild(nm);
+    const tg=document.createElement('span');tg.className='user-tag';tg.textContent=n===nickname?'（你）':'';row.appendChild(tg);
+    box.appendChild(row);
+  }
+  if(cryptoKey)renderMessages(loadMessages());
+}
+
+/* ============ 已读回执 ============ */
+function sendReadReceipt(){
+  if(!cryptoKey)return;
+  const msgs=loadMessages();
+  const others=msgs.filter(m=>m.sender!==nickname);
+  if(others.length===0)return;
+  const last=others[others.length-1];
+  if(!readReceipts[last.id])readReceipts[last.id]=new Set();
+  if(readReceipts[last.id].has(nickname))return;
+  readReceipts[last.id].add(nickname);
+  saveReadReceipts();
+  sendEncrypted({type:'read',reader:nickname,lastReadTime:last.time});
+}
+function handleReadReceipt(obj){
+  if(obj.reader===nickname)return;
+  const msgs=loadMessages();let changed=false;
+  msgs.forEach(m=>{
+    if(m.time<=obj.lastReadTime&&m.sender!==obj.reader){
+      if(!readReceipts[m.id])readReceipts[m.id]=new Set();
+      if(!readReceipts[m.id].has(obj.reader)){readReceipts[m.id].add(obj.reader);changed=true}
+    }
+  });
+  if(changed){saveReadReceipts();renderMessages(msgs)}
+}
+function getReadStatus(msg){
+  if(msg.sender!==nickname)return '';
+  const readers=readReceipts[msg.id]?readReceipts[msg.id].size:0;
+  const total=getMemberCount();
+  if(readers===0)return '已发送';
+  if(readers>=total-1)return '全部已读';
+  return `已读 ${readers}`;
+}
+
+function updateUnreadBadge(){
+  const b=$('unreadBadge');
+  if(unreadCount>0){b.textContent=unreadCount>99?'99+':unreadCount;b.classList.add('show')}
+  else b.classList.remove('show');
+}
+
+/* ============ 渲染消息 ============ */
+async function renderMessages(msgs){
+  const box=$('messages');box.innerHTML='';
+  msgs.sort((a,b)=>a.time-b.time);
+  if(msgs.length===0){
+    const d=document.createElement('div');d.className='sys-msg';d.textContent='端到端加密 · 服务器只转发密文';box.appendChild(d);return;
+  }
+  for(const m of msgs){
+    const isMine=m.sender===nickname;
+    const isMedia=!!m.mediaType;
+    const row=document.createElement('div');
+    row.className='msg-row '+(isMine?'mine':'other');
+    if(!isMine){
+      const av=document.createElement('div');av.className='msg-avatar';
+      const avatarData=userAvatars[m.sender];
+      av.innerHTML=avatarData?`<img src="${avatarData}">`:escapeHtml(m.sender.charAt(0).toUpperCase());
+      if(avatarData)av.onclick=()=>showLightbox(avatarData,m.sender);
+      row.appendChild(av);
+    }
+    const div=document.createElement('div');
+    div.className='msg '+(isMine?'mine ':'other ')+(isMedia?'media-msg ':'')+(m.error?' error':'');
+    const t=timeStr(m.time);
+    const readStatus=getReadStatus(m);
+    const readClass=readStatus==='全部已读'?'read-status all-read':'read-status';
+    let inner='';
+    if(!isMine)inner+=`<div class="sender">${escapeHtml(m.sender)}</div>`;
+    if(isMedia){inner+=`<div class="media" data-media-id="${m.id}"><div class="media-loading">加载中...</div></div>`}
+    else{inner+=`<div class="text">${escapeHtml(m.text||'')}${m.pending?'<span class="pending">·</span>':''}</div>`}
+    inner+=`<div class="meta"><span>${t}</span>${readStatus?`<span class="${readClass}">${readStatus}</span>`:''}</div>`;
+    div.innerHTML=inner;
+    row.appendChild(div);
+    box.appendChild(row);
+    if(isMedia)loadMediaInto(m.id,m.mimeType,m.mediaType);
+  }
+  box.scrollTop=box.scrollHeight;
+  if(currentGroup&&msgs.length>0){
+    const last=msgs[msgs.length-1];
+    const preview=last.mediaType?'[图片/视频]':(last.text||'').slice(0,40);
+    updateGroupRecord(currentGroup.id,{lastMsg:preview,lastTime:last.time});
+  }
+}
+
+async function loadMediaInto(msgId,mimeType,mediaType){
+  const el=document.querySelector(`[data-media-id="${msgId}"]`);if(!el)return;
+  try{
+    const rec=await idbGet(msgId);
+    if(!rec){
+      el.innerHTML=`<div class="media-loading">媒体尚未收到<br>请等待或让对方重发</div>`;
+      return;
+    }
+    const url=`data:${rec.mimeType||mimeType};base64,${rec.data}`;
+    if(mediaType==='video')el.innerHTML=`<video controls preload="metadata" src="${url}"></video>`;
+    else el.innerHTML=`<img src="${url}" alt="">`;
+  }catch(e){el.innerHTML=`<div class="media-loading">读取失败</div>`}
+}
+
+/* ============ 头像放大 ============ */
+function showLightbox(dataUrl,name){
+  $('lightboxImg').src=dataUrl;
+  $('lightboxName').textContent=name||'';
+  $('lightbox').classList.add('show');
+}
+$('lightbox').onclick=()=>$('lightbox').classList.remove('show');
+
+/* ============ MQTT ============ */
+function connectMQTT(group){
+  if(typeof mqtt==='undefined'){setStatus('offline','MQTT 未加载');return}
+  const topicHash=sha256('topic:'+group.name+':'+group.pass);
+  roomTopic='tgchat/'+bytesToHex(topicHash).slice(0,32);
+  mqttClient=mqtt.connect(MQTT_URL,{
+    clientId:'tgc_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),
+    clean:true,reconnectPeriod:3000,connectTimeout:10000,keepalive:60
+  });
+  mqttClient.on('connect',()=>{
+    mqttClient.subscribe(roomTopic,{qos:0},err=>{
+      if(err){setStatus('offline','订阅失败')}
+      else{
+        setStatus('online','已连接 · 端到端加密');
+        flushQueue();
+        broadcastPresence(true);
+        if(heartbeatTimer)clearInterval(heartbeatTimer);
+        if(cleanupTimer)clearInterval(cleanupTimer);
+        heartbeatTimer=setInterval(()=>broadcastPresence(false),25000);
+        cleanupTimer=setInterval(cleanupOfflineUsers,10000);
+        updateOnlineDisplay();
+      }
+    });
+  });
+  mqttClient.on('message',(t,p)=>handleIncoming(p));
+  mqttClient.on('error',()=>setStatus('offline','连接出错'));
+  mqttClient.on('close',()=>setStatus('offline','已断开'));
+  mqttClient.on('reconnect',()=>setStatus('','重连中...'));
+  mqttClient.on('offline',()=>setStatus('offline','离线'));
+}
+
+function handleIncoming(payload){
+  if(!cryptoKey||payload.length<17)return;
+  try{
+    const iv=payload.subarray(0,16),ct=payload.subarray(16);
+    const plain=decryptString(cryptoKey,iv,ct);
+    const obj=JSON.parse(plain);
+
+    if(obj.type==='presence'){handlePresence(obj);return}
+    if(obj.type==='offline'){handleOffline(obj);return}
+    if(obj.type==='read'){handleReadReceipt(obj);return}
+    if(obj.type==='media-chunk'){handleMediaChunk(obj);return}
+    if(obj.type==='media-complete'){handleMediaComplete(obj);return}
+
+    if(seenIds.has(obj.id))return;
+    seenIds.add(obj.id);
+    saveLocal(obj.id,iv,ct,obj.time||Date.now(),false);
+    renderMessages(loadMessages());
+    if(obj.sender!==nickname&&navigator.vibrate){try{navigator.vibrate(30)}catch{}}
+    if(obj.sender!==nickname){
+      if(chatVisible())sendReadReceipt();
+      else{unreadCount++;updateUnreadBadge()}
+    }
+  }catch{}
+}
+
+/* ============ 媒体分片：关键修复 ============ */
+async function handleMediaChunk(obj){
+  const {id,chunkIndex,totalChunks,mediaType,mimeType,data,sender,time}=obj;
+
+  if(!incomingMedia[id]){
+    incomingMedia[id]={
+      chunks:{},total:totalChunks,mediaType,mimeType,sender,
+      time:time||Date.now(),received:0,
+      timeout:setTimeout(()=>{
+        if(incomingMedia[id]){
+          delete incomingMedia[id];
+          showBanner(`⚠️ ${sender} 的媒体接收超时（分片丢失）`,true);
+          setTimeout(hideBanner,3000);
+        }
+      },MEDIA_TIMEOUT)
+    };
+  }
+  const buf=incomingMedia[id];
+  if(buf.chunks[chunkIndex]!==undefined)return;
+  buf.chunks[chunkIndex]=data;
+  buf.received++;
+
+  if(buf.received>=buf.total){
+    clearTimeout(buf.timeout);
+    try{
+      let full='';
+      for(let i=0;i<buf.total;i++){
+        if(buf.chunks[i]===undefined)throw new Error('missing chunk');
+        full+=buf.chunks[i];
+      }
+      // ★ 关键修复：await 写入完成再渲染
+      await idbPut({id,mediaType:buf.mediaType,mimeType:buf.mimeType,data:full,time:buf.time});
+
+      if(!seenIds.has(id)){
+        seenIds.add(id);
+        const metaPayload=JSON.stringify({sender:buf.sender,mediaType:buf.mediaType,mimeType:buf.mimeType,text:''});
+        const metaIv=randomBytes(16);
+        const metaCt=encryptString(cryptoKey,metaIv,metaPayload);
+        saveLocal(id,metaIv,metaCt,buf.time,false);
+      }
+      delete incomingMedia[id];
+      await renderMessages(loadMessages());
+      if(buf.sender!==nickname&&navigator.vibrate){try{navigator.vibrate(50)}catch{}}
+      if(buf.sender!==nickname){
+        if(chatVisible())sendReadReceipt();
+        else{unreadCount++;updateUnreadBadge()}
+      }
+    }catch(e){
+      clearTimeout(buf.timeout);
+      delete incomingMedia[id];
+      showBanner('⚠️ 媒体接收失败：分片不完整',true);
+      setTimeout(hideBanner,3000);
+    }
+  }
+}
+
+function handleMediaComplete(obj){
+  // 如果收到 complete 但还缺片，等待超时后自动清理
+  // 这里可以做重传请求，暂时只做日志
+}
+
+function publishMessage(id,text){
+  const iv=randomBytes(16);
+  const payload=JSON.stringify({id,sender:nickname,text,time:Date.now()});
+  const ct=encryptString(cryptoKey,iv,payload);
+  seenIds.add(id);
+  const connected=mqttClient&&mqttClient.connected;
+  saveLocal(id,iv,ct,Date.now(),!connected);
+  if(connected)mqttClient.publish(roomTopic,concatBytes(iv,ct),{qos:0});
+  else pendingQueue.push({id,iv,ct});
+  return connected;
+}
+function flushQueue(){
+  if(!mqttClient||!mqttClient.connected)return;
+  while(pendingQueue.length>0){
+    const item=pendingQueue.shift();
+    mqttClient.publish(roomTopic,concatBytes(item.iv,item.ct),{qos:0});
+    markSent(item.id);
+  }
+  renderMessages(loadMessages());
+}
+function disconnectMQTT(){
+  if(mqttClient){try{broadcastOffline()}catch{}}
+  if(heartbeatTimer)clearInterval(heartbeatTimer);
+  if(cleanupTimer)clearInterval(cleanupTimer);
+  heartbeatTimer=null;cleanupTimer=null;
+  if(mqttClient){setTimeout(()=>{try{mqttClient.end(true)}catch{}},100);mqttClient=null}
+}
+
+/* ============ 发送媒体：关键修复 ============ */
+async function sendMediaFile(file){
+  if(!cryptoKey)return;
+  if(!mqttClient||!mqttClient.connected){alert('未连接服务器，请稍后重试');return}
+  if(file.size>MAX_FILE_SIZE){alert('文件太大，请选择 20MB 以内的图片或视频');return}
+
+  const mediaType=file.type.startsWith('video/')?'video':'image';
+  const id=Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const time=Date.now();
+  const totalChunks=Math.ceil(file.size/CHUNK_SIZE);
+
+  $('attachBtn').disabled=true;
+  showBanner(`准备发送...`);
+
+  try{
+    const buffer=await file.arrayBuffer();
+    const bytes=new Uint8Array(buffer);
+    const fullBase64=b64encode(bytes);
+
+    // ★ 先写入本地 IndexedDB 并等待完成，再渲染
+    await idbPut({id,mediaType,mimeType:file.type,data:fullBase64,time});
+
+    const metaPayload=JSON.stringify({sender:nickname,mediaType,mimeType:file.type,text:''});
+    const metaIv=randomBytes(16);
+    const metaCt=encryptString(cryptoKey,metaIv,metaPayload);
+    saveLocal(id,metaIv,metaCt,time,false);
+    seenIds.add(id);
+
+    // ★ await 渲染完成
+    await renderMessages(loadMessages());
+
+    // 逐片发送，每片之间留时间
+    for(let i=0;i<totalChunks;i++){
+      if(!mqttClient||!mqttClient.connected){
+        throw new Error('连接中断，已停止发送');
+      }
+      const start=i*CHUNK_SIZE;
+      const end=Math.min(start+CHUNK_SIZE,bytes.length);
+      const chunk=bytes.subarray(start,end);
+      const payload=JSON.stringify({
+        id,sender:nickname,type:'media-chunk',
+        mediaType,mimeType:file.type,
+        chunkIndex:i,totalChunks,
+        data:b64encode(chunk),time
+      });
+      const iv=randomBytes(16);
+      const ct=encryptString(cryptoKey,iv,payload);
+      mqttClient.publish(roomTopic,concatBytes(iv,ct),{qos:0});
+      showBanner(`正在发送 ${i+1}/${totalChunks} 片...`);
+      await new Promise(r=>setTimeout(r,CHUNK_DELAY));
+    }
+
+    // 发送完成信令
+    sendEncrypted({type:'media-complete',id,sender:nickname,totalChunks});
+
+    showBanner('发送完成 ✅');
+    setTimeout(hideBanner,1500);
+  }catch(e){
+    showBanner('发送失败：'+e.message,true);
+    setTimeout(hideBanner,2500);
+  }finally{
+    $('attachBtn').disabled=false;
+  }
+}
+
+/* ============ 卡密 ============ */
+$('kamiBtn').onclick=()=>{
+  const val=$('kamiInput').value.trim();
+  if(!val){$('kamiError').textContent='请输入卡密';return}
+  if(VALID_KAMIS.includes(val)){
+    localStorage.setItem(KEY_ACTIVATED,'1');
+    $('kamiError').textContent='';
+    $('kamiInput').blur();
+    afterKamiOK();
+  }else $('kamiError').textContent='卡密无效，请检查后重试';
+};
+$('kamiInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('kamiBtn').click()});
+
+/* ============ 注册/登录 ============ */
+function switchTab(which){
+  if(which==='login'){
+    $('tabLogin').classList.add('active');$('tabRegister').classList.remove('active');
+    $('loginPanel').classList.add('active');$('registerPanel').classList.remove('active');
+  }else{
+    $('tabRegister').classList.add('active');$('tabLogin').classList.remove('active');
+    $('registerPanel').classList.add('active');$('loginPanel').classList.remove('active');
+  }
+  $('authError').textContent='';
+}
+$('tabLogin').onclick=()=>switchTab('login');
+$('tabRegister').onclick=()=>switchTab('register');
+
+$('avatarPreview').onclick=()=>$('avatarFile').click();
+$('avatarFile').addEventListener('change',async e=>{
+  const file=e.target.files&&e.target.files[0];e.target.value='';
+  if(!file)return;
+  try{
+    const dataUrl=await compressImage(file,128,0.75);
+    pendingRegAvatar=dataUrl;
+    $('avatarPreview').innerHTML=`<img src="${dataUrl}">`;
+    $('avatarTip').textContent='头像已上传 ✅';
+    $('avatarTip').classList.remove('required');
+  }catch(err){$('authError').textContent='头像处理失败：'+err.message}
+});
+
+$('registerBtn').onclick=async()=>{
+  const nick=$('regNick').value.trim();
+  const pass=$('regPass').value;
+  const pass2=$('regPass2').value;
+  if(nick.length<1||nick.length>12){$('authError').textContent='昵称需 1-12 字';return}
+  if(pass.length<6){$('authError').textContent='密码至少 6 位';return}
+  if(pass!==pass2){$('authError').textContent='两次密码不一致';return}
+  if(!pendingRegAvatar){$('authError').textContent='请上传头像（必填）';return}
+  $('registerBtn').disabled=true;$('registerBtn').textContent='注册中...';
+  try{
+    await registerUser(nick,pass,pendingRegAvatar);
+    localStorage.setItem(KEY_CURRENT,nick);
+    nickname=nick;myAvatarData=pendingRegAvatar;pendingRegAvatar=null;
+    $('authError').textContent='';
+    showChatList();
+  }catch(err){$('authError').textContent=err.message}
+  finally{$('registerBtn').disabled=false;$('registerBtn').textContent='注 册'}
+};
+
+$('loginBtn').onclick=async()=>{
+  const nick=$('loginNick').value.trim();
+  const pass=$('loginPass').value;
+  if(!nick||!pass){$('authError').textContent='请输入昵称和密码';return}
+  $('loginBtn').disabled=true;$('loginBtn').textContent='登录中...';
+  try{
+    verifyLogin(nick,pass);
+    localStorage.setItem(KEY_CURRENT,nick);
+    nickname=nick;myAvatarData=await getMyAvatar(nick);
+    $('authError').textContent='';
+    showChatList();
+  }catch(err){$('authError').textContent=err.message}
+  finally{$('loginBtn').disabled=false;$('loginBtn').textContent='登 录'}
+};
+$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click()});
+$('regPass2').addEventListener('keydown',e=>{if(e.key==='Enter')$('registerBtn').click()});
+
+$('qqLoginBtn').onclick=()=>{
+  alert('QQ 登录需要：\n\n1. connect.qq.com 申请开发者账号\n2. 创建应用获得 AppID/AppKey\n3. 后端服务器接收回调\n4. 域名 ICP 备案（大陆）\n\n纯静态网页无法实现 QQ 登录。');
+};
+
+async function afterKamiOK(){
+  const current=localStorage.getItem(KEY_CURRENT);
+  if(current){
+    const users=loadUsers();
+    if(users[current]){
+      nickname=current;
+      myAvatarData=await getMyAvatar(current);
+      showChatList();
+      return;
+    }else localStorage.removeItem(KEY_CURRENT);
+  }
+  showScreen('authScreen');
+}
+
+/* ============ 聊天列表页 ============ */
+function showChatList(){
+  updateDrawerInfo();
+  renderGroupList();
+  showScreen('chatListScreen');
+}
+function updateDrawerInfo(){
+  const av=$('drawerAvatar');
+  av.innerHTML=myAvatarData?`<img src="${myAvatarData}">`:escapeHtml(nickname.charAt(0).toUpperCase());
+  $('drawerName').textContent=nickname;
+}
+$('menuBtn').onclick=()=>{$('drawer').classList.add('show');$('drawerOverlay').classList.add('show')};
+$('drawerOverlay').onclick=()=>{$('drawer').classList.remove('show');$('drawerOverlay').classList.remove('show')};
+$('drawerAvatar').onclick=async()=>{
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';
+  inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    try{
+      const dataUrl=await compressImage(f,128,0.75);
+      await idbPut({id:'avatar_self_'+nickname,data:dataUrl,time:Date.now()});
+      myAvatarData=dataUrl;
+      updateDrawerInfo();
+      alert('头像已更新，下次进入群组时会广播给其他人');
+    }catch(e){alert('上传失败：'+e.message)}
+  };
+  inp.click();
+};
+$('drawerRefresh').onclick=()=>{renderGroupList();$('drawer').classList.remove('show');$('drawerOverlay').classList.remove('show')};
+$('drawerLogout').onclick=()=>{
+  if(!confirm('退出登录？账户仍保留在本机，可重新登录'))return;
+  localStorage.removeItem(KEY_CURRENT);
+  nickname='';myAvatarData=null;
+  $('loginPass').value='';$('regPass').value='';$('regPass2').value='';
+  $('avatarPreview').innerHTML='<span class="plus">＋</span>';
+  $('avatarTip').textContent='点击上传头像（必填）';
+  $('avatarTip').classList.add('required');
+  pendingRegAvatar=null;
+  switchTab('login');
+  showScreen('authScreen');
+};
+
+$('addGroupBtn').onclick=()=>{
+  $('joinName').value='';$('joinPass').value='';$('joinError').textContent='';
+  $('joinModal').classList.add('show');
+};
+$('joinCancel').onclick=()=>$('joinModal').classList.remove('show');
+$('joinConfirm').onclick=async()=>{
+  const name=$('joinName').value.trim();
+  const pass=$('joinPass').value;
+  if(name.length<1||name.length>20){$('joinError').textContent='群名需 1-20 字';return}
+  if(pass.length<6){$('joinError').textContent='密码至少 6 位';return}
+  const {id,existed}=addGroupRecord(name,pass);
+  $('joinModal').classList.remove('show');
+  if(existed){alert('这个群已经在你的列表里了');return}
+  await enterGroup(id);
+};
+
+function openDeleteModal(id,name){
+  deleteTargetId=id;
+  $('delHint').innerHTML=`确定要删除「${escapeHtml(name)}」吗？<br>聊天记录将从本机移除`;
+  $('delModal').classList.add('show');
+}
+$('delCancel').onclick=()=>{$('delModal').classList.remove('show');deleteTargetId=null};
+$('delConfirm').onclick=()=>{
+  if(deleteTargetId){
+    localStorage.removeItem('tg_msgs_g_'+deleteTargetId);
+    localStorage.removeItem('tg_reads_g_'+deleteTargetId);
+    removeGroupRecord(deleteTargetId);
+    renderGroupList();
+  }
+  $('delModal').classList.remove('show');
+  deleteTargetId=null;
+};
+
+/* ============ 聊天页 ============ */
+$('backBtn').onclick=()=>leaveGroup();
+$('headerInfo').onclick=()=>{$('onlinePanel').classList.toggle('show')};
+$('chatMenuBtn').onclick=()=>{$('onlinePanel').classList.toggle('show')};
+$('onlineClose').onclick=()=>{$('onlinePanel').classList.remove('show')};
+
+function sendMessage(){
+  if(!cryptoKey)return;
+  const input=$('msgInput');const text=input.value.trim();if(!text)return;
+  const id=Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  publishMessage(id,text);input.value='';renderMessages(loadMessages());
+}
+$('sendBtn').onclick=sendMessage;
+$('msgInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+
+$('attachBtn').onclick=()=>{if(!cryptoKey)return;$('fileInput').click()};
+$('fileInput').addEventListener('change',async e=>{
+  const file=e.target.files&&e.target.files[0];e.target.value='';
+  if(file)await sendMediaFile(file);
+});
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    unreadCount=0;updateUnreadBadge();
+    if(cryptoKey&&chatVisible())sendReadReceipt();
+  }
+});
+
+if(window.visualViewport){
+  const vv=window.visualViewport;
+  const adjust=()=>{
+    const chat=$('chatScreen');if(!chat.classList.contains('active'))return;
+    const kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);
+    $('inputBar').style.transform=kb>0?`translateY(-${kb}px)`:'';
+    if(kb>0){const box=$('messages');setTimeout(()=>{box.scrollTop=box.scrollHeight},50)}
+  };
+  vv.addEventListener('resize',adjust);vv.addEventListener('scroll',adjust);
+}
+
+(async function init(){
+  openIDB().catch(()=>{});
+  if(localStorage.getItem(KEY_ACTIVATED)==='1')await afterKamiOK();
+  else showScreen('kamiScreen');
+  document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
+})();
+</script>
+</body>
+</html>
